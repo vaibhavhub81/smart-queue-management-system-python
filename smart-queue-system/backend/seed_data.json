@@ -1,0 +1,49 @@
+{
+    "users": [
+        {
+            "username": "student1",
+            "password": "password",
+            "email": "student1@example.com",
+            "role": "student"
+        },
+        {
+            "username": "staff1",
+            "password": "password",
+            "email": "staff1@example.com",
+            "role": "staff"
+        },
+        {
+            "username": "admin1",
+            "password": "password",
+            "email": "admin1@example.com",
+            "role": "admin",
+            "is_staff": true,
+            "is_superuser": true
+        }
+    ],
+    "services": [
+        {
+            "name": "Canteen",
+            "description": "Main campus canteen.",
+            "counters": [
+                { "name": "Counter 1" },
+                { "name": "Counter 2" }
+            ]
+        },
+        {
+            "name": "Library",
+            "description": "Book issue and return.",
+            "counters": [
+                { "name": "Issue Desk" },
+                { "name": "Return Desk" }
+            ]
+        },
+        {
+            "name": "Admin Office",
+            "description": "Administrative services.",
+            "counters": [
+                { "name": "Reception" }
+            ]
+        }
+    ]
+}

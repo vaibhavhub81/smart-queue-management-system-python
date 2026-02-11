@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13-alpine
+    container_name: smart_queue_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    networks:
+      - smart-queue-net
+
+  redis:
+    image: redis:6.2-alpine
+    container_name: smart_queue_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - smart-queue-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smart_queue_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-postgres}
+      - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-your-default-secret-key}
+      - DEBUG=${DEBUG:-1}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - smart-queue-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smart_queue_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - smart-queue-net
+
+  celery:
+    build: ./backend
+    container_name: smart_queue_celery
+    command: celery -A core worker -l info
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-postgres}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - db
+    networks:
+      - smart-queue-net
+
+  celery-beat:
+    build: ./backend
+    container_name: smart_queue_celery_beat
+    command: celery -A core beat -l info
+    volumes:
+      - ./backend:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - smart-queue-net
+
+volumes:
+  postgres_data:
+
+networks:
+  smart-queue-net:
+    driver: bridge

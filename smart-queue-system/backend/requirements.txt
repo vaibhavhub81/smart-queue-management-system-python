@@ -1,0 +1,27 @@
+# Django and related packages
+Django==5.0
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-environ==0.11.2
+gunicorn==21.2.0
+
+# Channels for WebSockets
+channels==4.0.0
+channels-redis==4.2.0
+
+# Celery for background tasks
+celery==5.3.6
+redis==5.0.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# Authentication
+djangorestframework-simplejwt==5.3.1
+
+# API Documentation
+drf-spectacular==0.27.1
+
+# Utilities
+whitenoise==6.6.0
+rich==13.7.0
