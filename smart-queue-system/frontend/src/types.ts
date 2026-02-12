@@ -4,6 +4,7 @@ export interface Service {
     description: string;
     is_active: boolean;
     counters: Counter[];
+    staff?: number[];
   }
   
   export interface Counter {
@@ -19,6 +20,7 @@ export interface Service {
     first_name: string;
     last_name: string;
     role: 'student' | 'staff' | 'admin';
+    password?: string;
   }
   
   export interface QueueEntry {

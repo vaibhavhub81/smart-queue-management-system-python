@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .models import QueueEntry, Service
 from .serializers import QueueEntrySerializer, CreateQueueEntrySerializer
-from core.permissions import IsStaff, IsAdminUser
+from core.permissions import IsStaffOrAdmin, IsAdminUser
 
 class QueueViewSet(viewsets.ViewSet):
     """
@@ -18,12 +18,18 @@ class QueueViewSet(viewsets.ViewSet):
     def get_queryset(self):
         return QueueEntry.objects.all()
 
-    @action(detail=True, methods=['post'], permission_classes=[IsStaff])
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
     def call_next(self, request, pk=None):
         """
         Calls the next user in the queue for a specific service.
         """
         service = get_object_or_404(Service, pk=pk)
+        user = request.user
+
+        # Check if the user is authorized to manage this service
+        if user.role != 'admin' and user not in service.staff.all():
+            return Response({'detail': 'You are not authorized to manage this service.'}, status=status.HTTP_403_FORBIDDEN)
+
         counter = request.data.get('counter_id')
         
         with transaction.atomic():
@@ -63,6 +69,17 @@ class QueueViewSet(viewsets.ViewSet):
             }
             broadcast_public_update.delay(public_message)
 
+            # Notify staff of the update
+            from notifications.tasks import notify_staff_of_queue_update
+            queue_entries = QueueEntry.objects.filter(service=service, status__in=['waiting', 'in_progress']).order_by('created_at')
+            queue_serializer = QueueEntrySerializer(queue_entries, many=True)
+            staff_message = {
+                'type': 'queue_update',
+                'service_id': service.id,
+                'queue': queue_serializer.data
+            }
+            notify_staff_of_queue_update.delay(service.id, staff_message)
+
             from analytics.tasks import log_activity
             log_activity.delay(
                 next_user_entry.user.id, 
@@ -75,15 +92,33 @@ class QueueViewSet(viewsets.ViewSet):
             serializer = QueueEntrySerializer(next_user_entry)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsStaff])
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
     def complete_service(self, request, pk=None):
         """
         Marks a queue entry as completed.
         """
         entry = get_object_or_404(QueueEntry, pk=pk)
+        user = request.user
+        service = entry.service
+
+        # Check if the user is authorized to manage this service
+        if user.role != 'admin' and user not in service.staff.all():
+            return Response({'detail': 'You are not authorized to manage this service.'}, status=status.HTTP_403_FORBIDDEN)
+
         entry.status = 'completed'
         entry.save()
         
+        # Notify staff of the update
+        from notifications.tasks import notify_staff_of_queue_update
+        queue_entries = QueueEntry.objects.filter(service=service, status__in=['waiting', 'in_progress']).order_by('created_at')
+        queue_serializer = QueueEntrySerializer(queue_entries, many=True)
+        staff_message = {
+            'type': 'queue_update',
+            'service_id': service.id,
+            'queue': queue_serializer.data
+        }
+        notify_staff_of_queue_update.delay(service.id, staff_message)
+
         from notifications.tasks import send_notification_to_user
         message = {
             'type': 'queue_update',
@@ -104,14 +139,32 @@ class QueueViewSet(viewsets.ViewSet):
         
         return Response({'detail': 'Service completed.'}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsStaff])
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
     def skip_user(self, request, pk=None):
         """
         Skips a user in the queue.
         """
         entry = get_object_or_404(QueueEntry, pk=pk)
+        user = request.user
+        service = entry.service
+
+        # Check if the user is authorized to manage this service
+        if user.role != 'admin' and user not in service.staff.all():
+            return Response({'detail': 'You are not authorized to manage this service.'}, status=status.HTTP_403_FORBIDDEN)
+
         entry.status = 'skipped'
         entry.save()
+
+        # Notify staff of the update
+        from notifications.tasks import notify_staff_of_queue_update
+        queue_entries = QueueEntry.objects.filter(service=service, status__in=['waiting', 'in_progress']).order_by('created_at')
+        queue_serializer = QueueEntrySerializer(queue_entries, many=True)
+        staff_message = {
+            'type': 'queue_update',
+            'service_id': service.id,
+            'queue': queue_serializer.data
+        }
+        notify_staff_of_queue_update.delay(service.id, staff_message)
         
         from notifications.tasks import send_notification_to_user
         message = {
@@ -158,11 +211,22 @@ class JoinQueueView(generics.CreateAPIView):
                 token_number=new_token_number
             )
             
+            # Notify staff of the update
+            from notifications.tasks import notify_staff_of_queue_update
+            queue_entries = QueueEntry.objects.filter(service=service, status__in=['waiting', 'in_progress']).order_by('created_at')
+            queue_serializer = QueueEntrySerializer(queue_entries, many=True)
+            staff_message = {
+                'type': 'queue_update',
+                'service_id': service.id,
+                'queue': queue_serializer.data
+            }
+            notify_staff_of_queue_update.delay(service.id, staff_message)
+
             from notifications.tasks import broadcast_public_update
             public_message = {
                 'type': 'public_update',
                 'service_id': service.id,
-                'queue_length': QueueEntry.objects.filter(service=service, status='waiting').count()
+                'queue_length': queue_entries.count()
             }
             broadcast_public_update.delay(public_message)
 

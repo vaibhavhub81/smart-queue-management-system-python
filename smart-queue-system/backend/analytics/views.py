@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import ActivityLog, Service
 from .serializers import ServiceAnalyticsSerializer
 from core.permissions import IsAdminUser
+from collections import defaultdict
 
 class ServiceAnalyticsView(views.APIView):
     """
@@ -15,19 +16,25 @@ class ServiceAnalyticsView(views.APIView):
     def get(self, request):
         today = timezone.now().date()
         
-        # Calculate analytics for each service
         services = Service.objects.all()
         analytics_data = []
 
-        for service in services:
-            # Count of different actions
-            completed_users = ActivityLog.objects.filter(service=service, action='service_completed', timestamp__date=today).count()
-            skipped_users = ActivityLog.objects.filter(service=service, action='user_skipped', timestamp__date=today).count()
-            total_users = ActivityLog.objects.filter(service=service, action='user_join', timestamp__date=today).count()
+        # Get all logs for today to process in memory
+        logs_today = ActivityLog.objects.filter(timestamp__date=today).order_by('timestamp')
 
-            # Calculate average wait time
-            logs_today = ActivityLog.objects.filter(service=service, timestamp__date=today)
-            avg_wait_time = self.calculate_average_wait_time(logs_today)
+        # Group logs by service
+        logs_by_service = defaultdict(list)
+        for log in logs_today:
+            logs_by_service[log.service_id].append(log)
+
+        for service in services:
+            service_logs = logs_by_service.get(service.id, [])
+            
+            total_users = sum(1 for log in service_logs if log.action == 'user_join')
+            completed_users = sum(1 for log in service_logs if log.action == 'service_completed')
+            skipped_users = sum(1 for log in service_logs if log.action == 'user_skipped')
+
+            avg_wait_time = self.calculate_average_wait_time(service_logs)
 
             analytics_data.append({
                 'service_id': service.id,
@@ -43,23 +50,21 @@ class ServiceAnalyticsView(views.APIView):
 
     def calculate_average_wait_time(self, logs):
         total_wait_time = timezone.timedelta(0)
-        valid_waits = 0
+        user_join_times = {}
+        completed_count = 0
 
-        # Filter for 'called' or 'completed' actions
-        processed_logs = logs.filter(action__in=['user_called', 'service_completed'])
+        for log in logs:
+            if log.action == 'user_join':
+                # Store the last join time for a user (in case they join multiple times)
+                user_join_times[log.user_id] = log.timestamp
+            elif log.action in ['service_completed', 'user_skipped', 'user_called']:
+                if log.user_id in user_join_times:
+                    wait_time = log.timestamp - user_join_times[log.user_id]
+                    # Basic check to avoid negative wait times if data is weird
+                    if wait_time > timezone.timedelta(0):
+                        total_wait_time += wait_time
+                        completed_count += 1
+                        # A user's wait time is only counted once.
+                        del user_join_times[log.user_id] 
 
-        for log in processed_logs:
-            # Find the corresponding 'join' action for the same user and service
-            join_log = ActivityLog.objects.filter(
-                user=log.user,
-                service=log.service,
-                action='user_join',
-                timestamp__lt=log.timestamp
-            ).order_by('-timestamp').first()
-
-            if join_log:
-                wait_time = log.timestamp - join_log.timestamp
-                total_wait_time += wait_time
-                valid_waits += 1
-
-        return total_wait_time / valid_waits if valid_waits > 0 else timezone.timedelta(0)
+        return total_wait_time / completed_count if completed_count > 0 else timezone.timedelta(0)

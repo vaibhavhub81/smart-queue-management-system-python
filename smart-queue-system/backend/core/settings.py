@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'smart_queue_app',
     'notifications',
     'analytics',
+    'admin_api',
+    'staff_api',
     'core', # Add the core app to INSTALLED_APPS to discover its management commands
 ]
 

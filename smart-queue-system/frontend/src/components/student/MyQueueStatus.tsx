@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery, useQueryClient } from 'react-query';
 import api from '../../services/api';
 import { QueueEntry } from '../../types';
 import useWebSocket from '../../hooks/useWebSocket';
@@ -10,16 +10,33 @@ const fetchMyQueues = async (): Promise<QueueEntry[]> => {
 };
 
 const MyQueueStatus: React.FC = () => {
-  const { data: myQueues, isLoading, error } = useQuery<QueueEntry[]>('my-queues', fetchMyQueues);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  const { data: myQueues, isLoading, error } = useQuery<QueueEntry[]>('my-queues', fetchMyQueues, {
+    // Keep the data fresh but rely on websockets for instant updates
+    refetchInterval: 30000, 
+  });
+  
+  const [callMessage, setCallMessage] = useState<string | null>(null);
   const lastJsonMessage = useWebSocket();
 
   useEffect(() => {
-    if (lastJsonMessage) {
-      setNotifications(prev => [...prev, lastJsonMessage]);
-      // You can also add a browser notification here
+    if (lastJsonMessage?.type === 'send_notification') {
+        const message = lastJsonMessage.message;
+        
+        // When any queue update comes through, refetch our queue status
+        if (message?.type === 'queue_update') {
+            queryClient.invalidateQueries('my-queues');
+
+            // If this message is calling the user, display it prominently
+            if(message.status === 'in_progress') {
+                setCallMessage(message.message);
+            } else {
+                // Clear the message if status is waiting, completed, etc.
+                setCallMessage(null);
+            }
+        }
     }
-  }, [lastJsonMessage]);
+  }, [lastJsonMessage, queryClient]);
 
   if (isLoading) return <div>Loading your queue status...</div>;
   if (error) return <div>An error occurred.</div>;
@@ -27,6 +44,14 @@ const MyQueueStatus: React.FC = () => {
   return (
     <div className="p-6 bg-white rounded-lg shadow-md">
       <h2 className="mb-4 text-2xl font-bold text-gray-800">My Queues</h2>
+      
+      {/* Display call to action if user is being called */}
+      {callMessage && (
+        <div className="p-4 mb-4 text-lg font-bold text-center text-white bg-blue-500 rounded-lg animate-pulse">
+            {callMessage}
+        </div>
+      )}
+
       {myQueues && myQueues.length > 0 ? (
         <ul className="space-y-4">
           {myQueues.map((entry) => (
@@ -50,17 +75,6 @@ const MyQueueStatus: React.FC = () => {
       ) : (
         <p>You are not in any queues.</p>
       )}
-      
-      <div className="mt-6">
-        <h3 className="mb-2 text-lg font-bold">Notifications</h3>
-        <div className="h-48 p-2 overflow-y-auto bg-gray-100 border rounded-md">
-            {notifications.map((note, index) => (
-                <div key={index} className="p-2 mb-2 text-sm bg-gray-200 rounded">
-                    {typeof note.message === 'string' ? note.message : JSON.stringify(note.message)}
-                </div>
-            ))}
-        </div>
-      </div>
     </div>
   );
 };

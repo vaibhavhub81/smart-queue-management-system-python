@@ -14,10 +14,29 @@ const LoginPage: React.FC = () => {
     setError('');
 
     try {
-      const response = await api.post('/users/token/', { username, password });
-      const { access, refresh } = response.data;
+      // Step 1: Get auth tokens
+      const tokenResponse = await api.post('/users/token/', { username, password });
+      const { access, refresh } = tokenResponse.data;
       setAuthTokens(access, refresh);
-      navigate('/');
+      
+      // Step 2: Get user profile from the new /me/ endpoint
+      const profileResponse = await api.get('/users/me/');
+      const role = profileResponse.data.role;
+
+      // Step 3: Redirect based on the role from the API response
+      switch (role) {
+        case 'admin':
+          navigate('/admin');
+          break;
+        case 'staff':
+          navigate('/staff');
+          break;
+        case 'student':
+        default:
+          navigate('/');
+          break;
+      }
+
     } catch (err) {
       setError('Failed to log in. Please check your credentials.');
     }

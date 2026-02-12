@@ -30,3 +30,17 @@ def broadcast_public_update(message):
             "message": message,
         },
     )
+
+@shared_task
+def notify_staff_of_queue_update(service_id, message):
+    """
+    Sends a real-time queue update to all staff members of a specific service.
+    """
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"service_{service_id}_staff",
+        {
+            "type": "send_staff_notification",
+            "message": message,
+        },
+    )
