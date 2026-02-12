@@ -44,9 +44,10 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'services',
-    'queue',
+    'smart_queue_app',
     'notifications',
     'analytics',
+    'core', # Add the core app to INSTALLED_APPS to discover its management commands
 ]
 
 MIDDLEWARE = [

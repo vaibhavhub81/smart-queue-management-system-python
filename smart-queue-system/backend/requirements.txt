@@ -8,6 +8,7 @@ gunicorn==21.2.0
 # Channels for WebSockets
 channels==4.0.0
 channels-redis==4.2.0
+daphne==4.0.0
 
 # Celery for background tasks
 celery==5.3.6

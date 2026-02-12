@@ -16,7 +16,7 @@ urlpatterns = [
     # API endpoints
     path('api/users/', include('users.urls')),
     path('api/services/', include('services.urls')),
-    path('api/queue/', include('queue.urls')),
+    path('api/queue/', include('smart_queue_app.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/analytics/', include('analytics.urls')),
 ]

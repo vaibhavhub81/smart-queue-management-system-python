@@ -1,6 +1,8 @@
 import json
+import os
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.conf import settings
 from users.models import User
 from services.models import Service, Counter
 
@@ -10,7 +12,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write("Seeding database...")
 
-        with open('seed_data.json') as f:
+        with open(os.path.join(settings.BASE_DIR, 'seed_data.json')) as f:
             data = json.load(f)
 
         with transaction.atomic():

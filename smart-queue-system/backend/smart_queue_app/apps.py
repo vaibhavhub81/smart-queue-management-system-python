@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class QueueConfig(AppConfig):
+class SmartQueueAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'queue'
+    name = 'smart_queue_app'
