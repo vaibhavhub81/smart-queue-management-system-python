@@ -17,23 +17,30 @@ const MyQueueStatus: React.FC = () => {
   });
   
   const [callMessage, setCallMessage] = useState<string | null>(null);
+  const [customNotification, setCustomNotification] = useState<string | null>(null);
   const lastJsonMessage = useWebSocket();
 
   useEffect(() => {
     if (lastJsonMessage?.type === 'send_notification') {
         const message = lastJsonMessage.message;
         
-        // When any queue update comes through, refetch our queue status
+        // Handle queue updates (status changes)
         if (message?.type === 'queue_update') {
             queryClient.invalidateQueries('my-queues');
 
             // If this message is calling the user, display it prominently
             if(message.status === 'in_progress') {
                 setCallMessage(message.message);
+                setCustomNotification(null); // Clear custom notification if being called
             } else {
-                // Clear the message if status is waiting, completed, etc.
+                // Clear the call message if status is waiting, completed, etc.
                 setCallMessage(null);
             }
+        } 
+        // Handle custom notifications
+        else if (message?.type === 'custom_notification') {
+            setCustomNotification(message.message);
+            setCallMessage(null); // Clear call message if custom notification comes in
         }
     }
   }, [lastJsonMessage, queryClient]);
@@ -45,6 +52,13 @@ const MyQueueStatus: React.FC = () => {
     <div className="p-6 bg-white rounded-lg shadow-md">
       <h2 className="mb-4 text-2xl font-bold text-gray-800">My Queues</h2>
       
+      {/* Display custom notification */}
+      {customNotification && (
+        <div className="p-4 mb-4 text-lg font-bold text-center text-white bg-purple-500 rounded-lg animate-pulse">
+            {customNotification}
+        </div>
+      )}
+
       {/* Display call to action if user is being called */}
       {callMessage && (
         <div className="p-4 mb-4 text-lg font-bold text-center text-white bg-blue-500 rounded-lg animate-pulse">
@@ -64,7 +78,8 @@ const MyQueueStatus: React.FC = () => {
                 <span className={`px-2 py-1 text-xs font-semibold text-white rounded-full ${
                     entry.status === 'waiting' ? 'bg-yellow-500' :
                     entry.status === 'in_progress' ? 'bg-blue-500' :
-                    entry.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
+                    entry.status === 'completed' ? 'bg-green-500' : 
+                    entry.status === 'rejected' ? 'bg-orange-500' : 'bg-red-500' // Added rejected status
                 }`}>
                   {entry.status}
                 </span>

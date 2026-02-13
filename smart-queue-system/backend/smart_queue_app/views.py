@@ -186,6 +186,89 @@ class QueueViewSet(viewsets.ViewSet):
         
         return Response({'detail': 'User skipped.'}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
+    def reject_user(self, request, pk=None):
+        """
+        Rejects a user from the queue.
+        """
+        entry = get_object_or_404(QueueEntry, pk=pk)
+        user = request.user
+        service = entry.service
+
+        # Check if the user is authorized to manage this service
+        if user.role != 'admin' and user not in service.staff.all():
+            return Response({'detail': 'You are not authorized to manage this service.'}, status=status.HTTP_403_FORBIDDEN)
+
+        entry.status = 'rejected'
+        entry.save()
+
+        # Notify staff of the update
+        from notifications.tasks import notify_staff_of_queue_update
+        queue_entries = QueueEntry.objects.filter(service=service, status__in=['waiting', 'in_progress']).order_by('created_at')
+        queue_serializer = QueueEntrySerializer(queue_entries, many=True)
+        staff_message = {
+            'type': 'queue_update',
+            'service_id': service.id,
+            'queue': queue_serializer.data
+        }
+        notify_staff_of_queue_update.delay(service.id, staff_message)
+        
+        from notifications.tasks import send_notification_to_user
+        message = {
+            'type': 'queue_update',
+            'status': 'rejected',
+            'service': entry.service.name,
+            'message': f"Your request for {entry.service.name} has been rejected. Please contact staff for more information."
+        }
+        send_notification_to_user.delay(entry.user.id, message)
+        
+        from analytics.tasks import log_activity
+        log_activity.delay(
+            entry.user.id,
+            entry.service.id,
+            'user_rejected',
+            counter_id=entry.counter_id,
+            details={'token': entry.token_number}
+        )
+        
+        return Response({'detail': 'User rejected.'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffOrAdmin])
+    def send_custom_notification(self, request, pk=None):
+        """
+        Sends a custom notification message to a specific user in the queue.
+        """
+        entry = get_object_or_404(QueueEntry, pk=pk)
+        user = request.user
+        service = entry.service
+
+        # Check if the user is authorized to manage this service
+        if user.role != 'admin' and user not in service.staff.all():
+            return Response({'detail': 'You are not authorized to manage this service.'}, status=status.HTTP_403_FORBIDDEN)
+
+        custom_message_text = request.data.get('message')
+        if not custom_message_text:
+            return Response({'detail': 'Message text is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from notifications.tasks import send_notification_to_user
+        message = {
+            'type': 'custom_notification',
+            'service': entry.service.name,
+            'message': custom_message_text
+        }
+        send_notification_to_user.delay(entry.user.id, message)
+        
+        from analytics.tasks import log_activity
+        log_activity.delay(
+            entry.user.id,
+            entry.service.id,
+            'custom_notification_sent',
+            counter_id=entry.counter_id,
+            details={'token': entry.token_number, 'message': custom_message_text}
+        )
+
+        return Response({'detail': 'Custom notification sent.'}, status=status.HTTP_200_OK)
+
 
 class JoinQueueView(generics.CreateAPIView):
     """

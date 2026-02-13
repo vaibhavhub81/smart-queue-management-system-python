@@ -29,7 +29,7 @@ export interface Service {
     service: Service;
     counter: Counter | null;
     token_number: number;
-    status: 'waiting' | 'in_progress' | 'completed' | 'skipped';
+    status: 'waiting' | 'in_progress' | 'completed' | 'skipped' | 'rejected';
     created_at: string;
   }
   
